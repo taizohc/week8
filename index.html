@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Poker Monte Carlo Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --felt: #0a1f0e;
+    --felt-light: #112a14;
+    --felt-mid: #0d2411;
+    --gold: #c9a84c;
+    --gold-light: #e8cc7a;
+    --gold-dim: #7a6330;
+    --ivory: #f5f0e8;
+    --ivory-dim: #c8c0a8;
+    --red: #c0392b;
+    --text-muted: #6a8a6e;
+    --border: rgba(201,168,76,0.25);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #050e07;
+    color: var(--ivory);
+    font-family: 'IBM Plex Mono', monospace;
+    min-height: 100vh;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px),
+      repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+  .header {
+    text-align: center;
+    padding: 2.5rem 0 2rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+    position: relative;
+  }
+  .header::before, .header::after {
+    content: '♠ ♥ ♦ ♣';
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    color: var(--gold-dim);
+    letter-spacing: 6px;
+  }
+  .header::before { left: 0; }
+  .header::after { right: 0; }
+  .header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 900;
+    color: var(--gold);
+    text-shadow: 0 0 40px rgba(201,168,76,0.3);
+    letter-spacing: -1px;
+    line-height: 1.1;
+  }
+  .header .subtitle {
+    margin-top: 0.5rem;
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .controls-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: var(--felt-light);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 200px;
+  }
+  .control-group label {
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  input[type=range] {
+    flex: 1;
+    appearance: none;
+    height: 2px;
+    background: var(--gold-dim);
+    border-radius: 1px;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--gold);
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(201,168,76,0.5);
+  }
+  .hands-count {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--gold);
+    min-width: 70px;
+    text-align: right;
+  }
+  .btn-deal {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 10px 24px;
+    background: transparent;
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .btn-deal:hover { background: rgba(201,168,76,0.1); box-shadow: 0 0 15px rgba(201,168,76,0.2); }
+  .btn-deal:active { transform: scale(0.98); }
+  .btn-deal:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn-reset {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 10px 16px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid rgba(106,138,110,0.3);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .btn-reset:hover { color: var(--ivory-dim); border-color: rgba(106,138,110,0.6); }
+  .progress-track {
+    height: 2px;
+    background: rgba(255,255,255,0.05);
+    margin-bottom: 1.5rem;
+    border-radius: 1px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--gold-dim), var(--gold));
+    border-radius: 1px;
+    transition: width 0.1s linear;
+    width: 0%;
+  }
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 1.5rem;
+  }
+  @media (max-width: 600px) { .stats-row { grid-template-columns: repeat(2,1fr); } }
+  .stat {
+    background: var(--felt-light);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 12px 14px;
+  }
+  .stat .s-label {
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+  }
+  .stat .s-val {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--gold);
+    line-height: 1;
+  }
+  .stat .s-val.small { font-size: 12px; padding-top: 3px; }
+  .hand-display {
+    background: var(--felt-mid);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    min-height: 80px;
+  }
+  .hand-label {
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .cards-wrap { display: flex; gap: 6px; }
+  .playing-card {
+    width: 44px;
+    height: 62px;
+    background: var(--ivory);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-family: 'Playfair Display', serif;
+    line-height: 1.2;
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.5);
+    animation: cardFlip 0.3s ease;
+  }
+  @keyframes cardFlip {
+    from { transform: rotateY(90deg) scale(0.8); opacity: 0; }
+    to { transform: rotateY(0) scale(1); opacity: 1; }
+  }
+  .playing-card .cr { font-size: 13px; }
+  .playing-card .cs { font-size: 17px; }
+  .playing-card.red { color: var(--red); }
+  .playing-card.black { color: #1a1a1a; }
+  .hand-name-result {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem;
+    color: var(--gold-light);
+    font-style: italic;
+    margin-left: auto;
+  }
+  .hand-placeholder { color: var(--text-muted); font-size: 11px; letter-spacing: 2px; }
+  .table-section {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .table-header {
+    display: grid;
+    grid-template-columns: 155px 1fr 95px 110px 95px 72px;
+    background: rgba(201,168,76,0.08);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+  }
+  .th {
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--gold-dim);
+  }
+  .th.right { text-align: right; }
+  .hand-row {
+    display: grid;
+    grid-template-columns: 155px 1fr 95px 110px 95px 72px;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(201,168,76,0.07);
+    align-items: center;
+    transition: background 0.15s;
+  }
+  .hand-row:last-child { border-bottom: none; }
+  .hand-row:hover { background: rgba(201,168,76,0.04); }
+  .hname { font-size: 12px; color: var(--ivory); }
+  .rank-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    margin-right: 7px;
+    vertical-align: middle;
+  }
+  .bar-col {
+    padding-right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .bar-track {
+    flex: 1;
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+  }
+  .pct-lbl { font-size: 11px; color: var(--ivory-dim); min-width: 52px; text-align: right; }
+  .theory-c { font-size: 11px; color: var(--text-muted); text-align: right; }
+  .diff-c { font-size: 11px; text-align: right; font-weight: 500; }
+  .count-c { font-size: 10px; color: var(--text-muted); text-align: right; }
+  .converge-note {
+    background: rgba(201,168,76,0.06);
+    border-left: 2px solid var(--gold-dim);
+    padding: 8px 14px;
+    margin-bottom: 1.5rem;
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.7;
+    display: none;
+  }
+  .converge-note.on { display: block; }
+  .converge-note strong { color: var(--gold); font-weight: 500; }
+  .footer {
+    text-align: center;
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="header">
+    <h1>Monte Carlo Poker</h1>
+    <p class="subtitle">Empirical probability simulator — Week 8</p>
+  </header>
+
+  <div class="controls-bar">
+    <div class="control-group">
+      <label>Hands</label>
+      <input type="range" id="slider" min="1000" max="500000" step="1000" value="50000">
+      <span class="hands-count" id="sliderLabel">50,000</span>
+    </div>
+    <button class="btn-deal" id="dealBtn" onclick="runSim()">Deal ↗</button>
+    <button class="btn-reset" onclick="resetSim()">Reset</button>
+  </div>
+
+  <div class="progress-track"><div class="progress-fill" id="progress"></div></div>
+
+  <div class="stats-row">
+    <div class="stat"><div class="s-label">Hands Dealt</div><div class="s-val" id="sHands">0</div></div>
+    <div class="stat"><div class="s-label">Best Hand</div><div class="s-val small" id="sBest">—</div></div>
+    <div class="stat"><div class="s-label">Avg Error</div><div class="s-val" id="sError">—</div></div>
+    <div class="stat"><div class="s-label">Rarest Seen</div><div class="s-val small" id="sRare">—</div></div>
+  </div>
+
+  <div class="hand-display" id="handDisplay">
+    <span class="hand-label">Last hand</span>
+    <span class="hand-placeholder" id="ph">Deal to begin...</span>
+    <div class="cards-wrap" id="cw" style="display:none"></div>
+    <span class="hand-name-result" id="hn" style="display:none"></span>
+  </div>
+
+  <div class="converge-note" id="cn">
+    <strong>Law of Large Numbers in action:</strong> Watch the Diff column shrink as you deal more hands. At 50k hands expect ~0.05% avg error. At 500k it approaches ~0.005%. This is precisely how Metropolis &amp; Ulam (1948) used repeated random sampling to approximate truth — the core insight of the Monte Carlo method.
+  </div>
+
+  <div class="table-section">
+    <div class="table-header">
+      <div class="th">Hand</div>
+      <div class="th">Empirical frequency</div>
+      <div class="th right">Theory %</div>
+      <div class="th right">Odds</div>
+      <div class="th right">Diff</div>
+      <div class="th right">Count</div>
+    </div>
+    <div id="tb"></div>
+  </div>
+
+  <div class="footer">♠ &nbsp; Metropolis &amp; Ulam, 1948 &nbsp; ♥ &nbsp; Monte Carlo Method &nbsp; ♦ &nbsp; Computation, Culture &amp; Society &nbsp; ♣</div>
+</div>
+
+<script>
+const HD = [
+  { name:'Royal flush',     theory:0.000154, color:'#c9a84c', odds:'1 in 649,740' },
+  { name:'Straight flush',  theory:0.00139,  color:'#e8cc7a', odds:'1 in 72,193' },
+  { name:'Four of a kind',  theory:0.0240,   color:'#8e44ad', odds:'1 in 4,165' },
+  { name:'Full house',      theory:0.1441,   color:'#2980b9', odds:'1 in 694' },
+  { name:'Flush',           theory:0.1965,   color:'#1abc9c', odds:'1 in 509' },
+  { name:'Straight',        theory:0.3925,   color:'#27ae60', odds:'1 in 255' },
+  { name:'Three of a kind', theory:2.1128,   color:'#e67e22', odds:'1 in 47' },
+  { name:'Two pair',        theory:4.7539,   color:'#e74c3c', odds:'1 in 21' },
+  { name:'One pair',        theory:42.2569,  color:'#c0392b', odds:'1 in 2.4' },
+  { name:'High card',       theory:50.1177,  color:'#6a8a6e', odds:'1 in 2' },
+];
+const S=['♠','♥','♦','♣'], R=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+const RV={2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,J:11,Q:12,K:13,A:14};
+let counts=new Array(10).fill(0),total=0,running=false,raf=null,bestI=9,rareI=9,target=0;
+
+function deck(){const d=[];for(const s of S)for(const r of R)d.push({r,s});return d;}
+function shuf(d){for(let i=d.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[d[i],d[j]]=[d[j],d[i]];}return d;}
+function cls(h){
+  const rs=h.map(c=>RV[c.r]).sort((a,b)=>a-b);
+  const ss=h.map(c=>c.s);
+  const fl=ss.every(s=>s===ss[0]);
+  const wh=rs[4]===14&&rs[0]===2&&rs[1]===3&&rs[2]===4&&rs[3]===5;
+  const sq=rs[4]-rs[0]===4&&new Set(rs).size===5;
+  const st=sq||wh;
+  const cm={};rs.forEach(r=>cm[r]=(cm[r]||0)+1);
+  const fr=Object.values(cm).sort((a,b)=>b-a);
+  if(fl&&sq&&rs[0]===10)return 0;
+  if(fl&&st)return 1;
+  if(fr[0]===4)return 2;
+  if(fr[0]===3&&fr[1]===2)return 3;
+  if(fl)return 4;
+  if(st)return 5;
+  if(fr[0]===3)return 6;
+  if(fr[0]===2&&fr[1]===2)return 7;
+  if(fr[0]===2)return 8;
+  return 9;
+}
+
+function renderTable(){
+  const tb=document.getElementById('tb');
+  tb.innerHTML='';
+  const maxP=total>0?Math.max(...counts.map(c=>c/total*100)):55;
+  HD.forEach((h,i)=>{
+    const p=total>0?counts[i]/total*100:0;
+    const d=total>0?p-h.theory:null;
+    const bw=total>0?Math.min(100,p/maxP*100):0;
+    const ds=d===null?'—':(d>=0?'+':'')+d.toFixed(4)+'%';
+    const dc=d===null?'#6a8a6e':Math.abs(d)<0.05?'#1abc9c':d>0?'#e8cc7a':'#e74c3c';
+    const row=document.createElement('div');
+    row.className='hand-row';
+    row.innerHTML=`
+      <div class="hname"><span class="rank-dot" style="background:${h.color}"></span>${h.name}</div>
+      <div class="bar-col">
+        <div class="bar-track"><div class="bar-fill" style="width:${bw}%;background:${h.color}"></div></div>
+        <span class="pct-lbl">${total>0?p.toFixed(4)+'%':'—'}</span>
+      </div>
+      <div class="theory-c">${h.theory.toFixed(4)}%</div>
+      <div class="theory-c" style="color:var(--gold-dim);font-size:10px">${h.odds}</div>
+      <div class="diff-c" style="color:${dc}">${ds}</div>
+      <div class="count-c">${counts[i].toLocaleString()}</div>
+    `;
+    tb.appendChild(row);
+  });
+}
+
+function renderCards(hand){
+  const cw=document.getElementById('cw');
+  cw.innerHTML='';
+  hand.forEach(c=>{
+    const red=c.s==='♥'||c.s==='♦';
+    const el=document.createElement('div');
+    el.className='playing-card '+(red?'red':'black');
+    el.innerHTML=`<div class="cr">${c.r}</div><div class="cs">${c.s}</div>`;
+    cw.appendChild(el);
+  });
+}
+
+function updateStats(li){
+  document.getElementById('sHands').textContent=total.toLocaleString();
+  if(li<bestI){bestI=li;document.getElementById('sBest').textContent=HD[li].name;}
+  if(li<rareI&&counts[li]>0){rareI=li;document.getElementById('sRare').textContent=HD[li].name;}
+  if(total>0){
+    const e=HD.reduce((s,h,i)=>s+Math.abs(counts[i]/total*100-h.theory),0)/10;
+    document.getElementById('sError').textContent=e.toFixed(4)+'%';
+  }
+}
+
+function tick(){
+  if(!running)return;
+  const d=deck();
+  const n=Math.min(800,target-total);
+  let li=9,lh,batchBest=9;
+  for(let i=0;i<n;i++){
+    shuf(d);
+    const h=d.slice(0,5);
+    li=cls(h);
+    counts[li]++;
+    total++;
+    if(li<batchBest){batchBest=li;}
+    if(i===n-1)lh=h;
+  }
+  document.getElementById('progress').style.width=Math.min(100,total/target*100)+'%';
+  document.getElementById('ph').style.display='none';
+  document.getElementById('cw').style.display='flex';
+  const hn=document.getElementById('hn');
+  hn.style.display='block';
+  hn.textContent=HD[li].name;
+  renderCards(lh);
+  renderTable();
+  updateStats(batchBest);
+  if(total>=target){
+    running=false;
+    document.getElementById('dealBtn').disabled=false;
+    document.getElementById('dealBtn').textContent='Deal more ↗';
+    document.getElementById('cn').classList.add('on');
+    return;
+  }
+  raf=requestAnimationFrame(tick);
+}
+
+function runSim(){
+  if(running)return;
+  target=total+parseInt(document.getElementById('slider').value);
+  running=true;
+  document.getElementById('dealBtn').disabled=true;
+  document.getElementById('dealBtn').textContent='Dealing...';
+  document.getElementById('progress').style.width='0%';
+  if(total===0){bestI=9;rareI=9;}
+  raf=requestAnimationFrame(tick);
+}
+
+function resetSim(){
+  running=false;
+  if(raf)cancelAnimationFrame(raf);
+  counts=new Array(10).fill(0);
+  total=0;bestI=9;rareI=9;target=0;
+  document.getElementById('sHands').textContent='0';
+  document.getElementById('sBest').textContent='—';
+  document.getElementById('sError').textContent='—';
+  document.getElementById('sRare').textContent='—';
+  document.getElementById('progress').style.width='0%';
+  document.getElementById('dealBtn').disabled=false;
+  document.getElementById('dealBtn').textContent='Deal ↗';
+  document.getElementById('ph').style.display='block';
+  document.getElementById('cw').style.display='none';
+  document.getElementById('hn').style.display='none';
+  document.getElementById('cn').classList.remove('on');
+  renderTable();
+}
+
+document.getElementById('slider').addEventListener('input',function(){
+  document.getElementById('sliderLabel').textContent=parseInt(this.value).toLocaleString();
+});
+
+renderTable();
+</script>
+</body>
+</html>
